@@ -1,0 +1,27 @@
+{
+  "name": "improved-palm-tree",
+  "version": "2.0.0",
+  "description": "Discord video stream selfbot with encrypted state, bookmarks and seek support (fixed & improved)",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js",
+    "install-deps": "npm install"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "discord.js-selfbot-v13": "^3.4.0",
+    "@dank074/discord-video-stream": "^4.1.0",
+    "sqlite3": "^5.1.7",
+    "libsodium-wrappers": "^0.7.15",
+    "libsodium-wrappers-sumo": "^0.7.15"
+  },
+  "keywords": [
+    "discord",
+    "selfbot",
+    "video-stream"
+  ],
+  "license": "MIT"
+}
