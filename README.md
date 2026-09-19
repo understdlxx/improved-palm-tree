@@ -57,3 +57,24 @@ npm start
 - FFmpeg must be installed.
 - The DB is encrypted with a key derived from the token.
 - GitHub auto-push is best-effort and optional.
+
+---
+
+## GitHub Actions (اجرای روی سرور GitHub)
+
+فایل `.github/workflows/bot.yml` آماده است.
+
+### تنظیمات لازم در ریپازیتوری:
+
+1. برو به **Settings → Secrets and variables → Actions**
+2. این سه Secret را اضافه کن:
+
+| Name        | Value                          |
+|-------------|--------------------------------|
+| `TOKEN`     | توکن یوزر دیسکورد              |
+| `KAMBIZ_ID` | آیدی عددی اکانت خودت           |
+| `GH_TOKEN`  | (اختیاری) Personal Access Token با دسترسی `repo` اگر می‌خواهی DB را push کند |
+
+3. برو به تب **Actions** → workflow به نام **Kambiz Ghost Streamer** را انتخاب کن → **Run workflow**
+
+ربات هر ۴ ساعت یک‌بار (یا دستی) روی runner گیت‌هاب اجرا می‌شود.

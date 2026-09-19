@@ -1,0 +1,5 @@
+node_modules/
+kambiz_memory.sqlite
+*.log
+.env
+.DS_Store
