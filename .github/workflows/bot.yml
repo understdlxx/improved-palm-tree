@@ -16,23 +16,19 @@ jobs:
         with:
           token: ${{ secrets.GH_TOKEN }}
           fetch-depth: 0 
-          clean: true # این دستور سرور گیت‌هاب رو کامل می‌شوره که کش نمونه
+          clean: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      - name: Anti-Bug Check (Namayeshe Code)
-        run: |
-          echo "[!] Dar hale barresi file index.js roye server:"
-          head -n 5 index.js
-
       - name: Install FFmpeg (The Engine)
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
-      - name: Install Dependencies
-        run: npm install discord.js-selfbot-v13 @dank074/discord-video-stream sqlite3
+      - name: Fix Bugs & Install Dependencies
+        # این خط همون شاه‌کلیدیه که ارورِ libsodium رو از بیخ می‌گاد
+        run: npm install discord.js-selfbot-v13 @dank074/discord-video-stream sqlite3 libsodium-wrappers@0.7.10 tweetnacl
 
       - name: Run The Encrypted Ghost Bot
         env:
