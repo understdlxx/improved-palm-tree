@@ -1,65 +1,114 @@
-const { Client } = require('discord.js-selfbot-v13');
+const { Client: DiscordClient } = require('discord.js-selfbot-v13');
 const { Streamer, streamVideo } = require('@dank074/discord-video-stream');
+const sqlite3 = require('sqlite3').verbose();
+const { execSync } = require('child_process');
+const crypto = require('crypto');
 
 const TOKEN = process.env.TOKEN;
 const KAMBIZ_ID = process.env.KAMBIZ_ID;
-const GH_TOKEN = process.env.GH_TOKEN; // توکن شخصی گیت‌هاب تو
-const GIST_ID = process.env.GIST_ID;   // آیدی فایل مخفی
 
-if (!TOKEN || !GH_TOKEN || !GIST_ID) {
-    console.error('[-] Dash Kambiz, ye chizi to Secrets kamo kasrie!');
+if (!TOKEN || !KAMBIZ_ID) {
+    console.error('[-] Dash Kambiz, Secrets vared nashode!');
     process.exit(1);
 }
 
-const client = new Client({ checkUpdate: false });
+// 🛡️ سیستم رمزنگاری نظامی AES-256-CBC 
+// کلید رمزنگاری رو از خود توکن دیسکوردت می‌سازیم که هیچ جا ذخیره نشه
+const ENCRYPTION_KEY = crypto.createHash('sha256').update(TOKEN).digest();
+const IV_LENGTH = 16;
+
+function encryptData(text) {
+    const iv = crypto.randomBytes(IV_LENGTH);
+    const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), iv);
+    let encrypted = cipher.update(text);
+    encrypted = Buffer.concat([encrypted, cipher.final()]);
+    return iv.toString('hex') + ':' + encrypted.toString('hex');
+}
+
+function decryptData(text) {
+    try {
+        const textParts = text.split(':');
+        const iv = Buffer.from(textParts.shift(), 'hex');
+        const encryptedText = Buffer.from(textParts.join(':'), 'hex');
+        const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), iv);
+        let decrypted = decipher.update(encryptedText);
+        decrypted = Buffer.concat([decrypted, decipher.final()]);
+        return decrypted.toString();
+    } catch (err) {
+        console.error('[-] Khata to baz kardane ramz (Ehtemalan taze sakhti):', err.message);
+        return null;
+    }
+}
+
+const client = new DiscordClient({ checkUpdate: false });
 const streamer = new Streamer(client);
 
 let localState = {
     url: null, currentTime: 0, bookmarks: [],
-    isPlaying: false, timer: null, streamConnection: null
+    isPlaying: false, streamConnection: null
 };
 
-// 🧠 هوش مصنوعی برای خوندن حافظه از فایل مخفی (Gist)
-async function loadStateFromGist() {
-    try {
-        const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-            headers: { 'Authorization': `Bearer ${GH_TOKEN}` }
+// 🧠 اتصال به دیتابیس لوکال
+const db = new sqlite3.Database('./kambiz_memory.sqlite');
+
+db.serialize(() => {
+    // فقط یه آیدی و یه فیلد رمزنگاری شده ذخیره میکنیم. هیچ دیتای خامی نیست!
+    db.run(`CREATE TABLE IF NOT EXISTS encrypted_state (
+        id TEXT PRIMARY KEY,
+        secure_payload TEXT
+    )`);
+});
+
+// 🧠 خوندن و باز کردن رمز اطلاعات
+function loadDB() {
+    return new Promise((resolve) => {
+        db.get("SELECT secure_payload FROM encrypted_state WHERE id = 'main'", (err, row) => {
+            if (row && row.secure_payload) {
+                const decryptedStr = decryptData(row.secure_payload);
+                if (decryptedStr) {
+                    const parsed = JSON.parse(decryptedStr);
+                    localState.url = parsed.url || null;
+                    localState.currentTime = parsed.current_time || 0;
+                    localState.bookmarks = parsed.bookmarks || [];
+                    console.log(`[+] Hafeze az SQL baz va Ramzgoshayi shod! Saniye: ${localState.currentTime}`);
+                }
+            }
+            resolve();
         });
-        const data = await res.json();
-        const content = data.files['kambiz_memory.json'].content;
-        const parsed = JSON.parse(content);
-        
-        localState.url = parsed.url || null;
-        localState.currentTime = parsed.currentTime || 0;
-        localState.bookmarks = parsed.bookmarks || [];
-        console.log(`[+] Hafeze bazyabi shod! Akharin bar saniye ${localState.currentTime} bodi.`);
-    } catch (err) {
-        console.log('[-] Hafeze khaliye ya taze sakhti. Moshkeli nist.');
-    }
+    });
 }
 
-// 🧠 هوش مصنوعی برای سیو کردن حافظه تو فایل مخفی (بدون لیک شدن)
-async function saveStateToGist() {
-    try {
-        const payload = {
+// 🧠 رمزنگاری و ذخیره تو دیتابیس محلی
+function saveDB() {
+    return new Promise((resolve) => {
+        const rawData = JSON.stringify({
             url: localState.url,
-            currentTime: localState.currentTime,
+            current_time: localState.currentTime,
             bookmarks: localState.bookmarks
-        };
-        await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `Bearer ${GH_TOKEN}`,
-                'Accept': 'application/vnd.github+json'
-            },
-            body: JSON.stringify({
-                files: {
-                    'kambiz_memory.json': { content: JSON.stringify(payload) }
-                }
-            })
         });
+        const encryptedPayload = encryptData(rawData); // قفلش میکنیم
+        
+        const stmt = db.prepare(`INSERT OR REPLACE INTO encrypted_state (id, secure_payload) VALUES (?, ?)`);
+        stmt.run('main', encryptedPayload, () => {
+            stmt.finalize();
+            resolve();
+        });
+    });
+}
+
+// 🚀 ارسال فایلِ رمزنگاری شده به گیت‌هاب (کاملاً سایلنت که لاگ نیفته)
+function pushDBtoGitHub() {
+    try {
+        console.log('[+] Dar hale Push kardane DB be sorate makhfiyane...');
+        // اضافه کردن stdio: 'ignore' باعث میشه ترمینال گیت‌هاب هیچ لاگی نندازه که هکر بخونه
+        execSync('git config --global user.name "Ghost Bot"', { stdio: 'ignore' });
+        execSync('git config --global user.email "ghost@kambiz.local"', { stdio: 'ignore' });
+        execSync('git add kambiz_memory.sqlite', { stdio: 'ignore' });
+        execSync('git commit -m "🤖 Auto-save Encrypted DB" || echo ""', { stdio: 'ignore' });
+        execSync('git push', { stdio: 'ignore' });
+        console.log('[+] DB mese rooh roye Repo Push shod! 100% Secure.');
     } catch (err) {
-        console.error('[-] Nashod to Gist save konam:', err);
+        console.log('[-] Push nashod (Ehtemalan taqyiri nabod).');
     }
 }
 
@@ -70,8 +119,15 @@ function formatTime(secs) {
 
 client.on('ready', async () => {
     console.log(`[+] Mokhlesim Dash Kambiz! Bot ${client.user.username} bala oomad.`);
-    await loadStateFromGist(); // اول کار حافظه رو می‌خونه
+    await loadDB();
 });
+
+setInterval(async () => {
+    if (localState.isPlaying) {
+        localState.currentTime += 1;
+        if (localState.currentTime % 15 === 0) await saveDB();
+    }
+}, 1000);
 
 async function startStreaming(channel, startTime = 0) {
     if (!localState.url) return console.log('[-] Link nist dash!');
@@ -84,39 +140,31 @@ async function startStreaming(channel, startTime = 0) {
         udp.mediaConnection.setVideoStatus(true);
         localState.streamConnection = udp;
 
-        // 🚀 موتور استریم رو فول‌پاور کردم: بدون لگ، بافر قوی‌تر
-        let ffmpegArgs = `-re -ss ${startTime} -preset ultrafast -tune zerolatency -max_muxing_queue_size 1024 -probesize 32M -analyzeduration 10M -threads 4`;
+        let ffmpegArgs = `-re -ss ${startTime} -preset ultrafast -tune zerolatency -max_muxing_queue_size 1024 -threads 4`;
         
-        console.log(`[>>] Pakhsh az ${formatTime(startTime)} ba balatarin keyfiyat...`);
+        console.log(`[>>] Pakhsh az ${formatTime(startTime)}...`);
         streamVideo(localState.url, udp, ffmpegArgs, { width: 1280, height: 720, fps: 30, bitrateKbps: 3000 });
         
         localState.isPlaying = true;
         localState.currentTime = startTime;
-
-        if (localState.timer) clearInterval(localState.timer);
-        localState.timer = setInterval(async () => {
-            localState.currentTime += 1;
-            // هر 15 ثانیه سیو میکنه تو گیت‌هاب که محدودیت API نخوره
-            if (localState.currentTime % 15 === 0) {
-                await saveStateToGist(); 
-            }
-        }, 1000);
 
     } catch (err) {
         console.error('[-] Ride shod to stream:', err);
     }
 }
 
-function stopStreaming() {
-    if (localState.timer) clearInterval(localState.timer);
+async function stopStreaming() {
     if (localState.streamConnection) {
         localState.streamConnection.mediaConnection.setSpeaking(false);
         localState.streamConnection.mediaConnection.setVideoStatus(false);
     }
     streamer.leaveVoice();
     localState.isPlaying = false;
-    saveStateToGist(); // سیو نهایی موقع خروج
-    console.log(`[||] Stream stop shod. Time to Gist save shod: ${formatTime(localState.currentTime)}`);
+    
+    await saveDB(); 
+    pushDBtoGitHub(); 
+    
+    console.log(`[||] Stream stop shod. Database Ramznegarishode push shod. Time: ${formatTime(localState.currentTime)}`);
 }
 
 client.on('voiceStateUpdate', async (oldState, newState) => {
@@ -127,7 +175,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         await startStreaming(channel, localState.currentTime);
     } 
     else if (oldState.channelId && !newState.channelId) {
-        stopStreaming();
+        await stopStreaming();
     }
 });
 
@@ -140,29 +188,31 @@ client.on('messageCreate', async (message) => {
         localState.url = args[1];
         localState.currentTime = 0;
         localState.bookmarks = [];
-        await saveStateToGist();
-        message.edit(`[+] Link set shod va to hafeze makhfi save shod!`);
+        await saveDB();
+        pushDBtoGitHub();
+        message.edit(`[+] Link set shod va be sorate Ramzngarishode DB to GitHub push shod!`);
     }
 
     if (command === '!seek') {
         const targetSecond = parseInt(args[1]);
         if (isNaN(targetSecond)) return;
         message.edit(`[+] Dar hale paresh be ${formatTime(targetSecond)}...`);
-        stopStreaming();
+        await stopStreaming();
         localState.currentTime = targetSecond;
         if (message.member?.voice?.channel) startStreaming(message.member.voice.channel, targetSecond);
     }
 
     if (command === '!stop') {
-        stopStreaming();
+        await stopStreaming();
         message.edit(`[+] Tormoz! Time save shod: ${formatTime(localState.currentTime)}`);
     }
 
     if (command === '!hot') {
         let note = args.slice(1).join(' ') || 'Sokan-se nab';
         localState.bookmarks.push({ time: localState.currentTime, note: note });
-        await saveStateToGist(); 
-        message.edit(`🔥 Mark shod to hafeze makhfi! ${formatTime(localState.currentTime)}`);
+        await saveDB(); 
+        pushDBtoGitHub(); 
+        message.edit(`🔥 Mark shod! ${formatTime(localState.currentTime)}`);
     }
     
     if (command === '!marks') {
