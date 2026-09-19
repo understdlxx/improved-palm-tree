@@ -11,18 +11,25 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout Repo
-        uses: actions/checkout@v3
+      - name: Checkout Repo (Force Latest)
+        uses: actions/checkout@v4
         with:
           token: ${{ secrets.GH_TOKEN }}
+          fetch-depth: 0 
+          clean: true # این دستور سرور گیت‌هاب رو کامل می‌شوره که کش نمونه
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
 
+      - name: Anti-Bug Check (Namayeshe Code)
+        run: |
+          echo "[!] Dar hale barresi file index.js roye server:"
+          head -n 5 index.js
+
       - name: Install FFmpeg (The Engine)
-        run: sudo apt update && sudo apt install -y ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Install Dependencies
         run: npm install discord.js-selfbot-v13 @dank074/discord-video-stream sqlite3
