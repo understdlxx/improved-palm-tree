@@ -1,4 +1,4 @@
-name: Kambiz Smart Streamer Bot
+name: Kambiz Ghost Streamer
 
 on:
   workflow_dispatch:
@@ -8,25 +8,27 @@ on:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GH_TOKEN }}
 
-      - name: Setup Node.js (V18 for Native Fetch)
+      - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
 
-      - name: Install FFmpeg (The Beast Engine)
+      - name: Install FFmpeg (The Engine)
         run: sudo apt update && sudo apt install -y ffmpeg
 
-      - name: Install Dependencies (No Database Needed!)
-        run: npm install discord.js-selfbot-v13 @dank074/discord-video-stream
+      - name: Install Dependencies
+        run: npm install discord.js-selfbot-v13 @dank074/discord-video-stream sqlite3
 
-      - name: Run The Hacker-Proof Bot
+      - name: Run The Encrypted Ghost Bot
         env:
           TOKEN: ${{ secrets.TOKEN }}
           KAMBIZ_ID: ${{ secrets.KAMBIZ_ID }}
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          GIST_ID: ${{ secrets.GIST_ID }}
         run: node index.js
