@@ -1,39 +1,43 @@
 name: Kambiz Ghost Streamer
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:          # اجرای دستی از تب Actions
   schedule:
-    - cron: "0 */5 * * *"
+    - cron: "0 */4 * * *"     # هر ۴ ساعت یک‌بار (قابل تغییر)
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
     steps:
-      - name: Checkout Repo (Force Latest)
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GH_TOKEN }}
-          fetch-depth: 0 
-          clean: true
+          token: ${{ secrets.GH_TOKEN || github.token }}
+          fetch-depth: 0
 
-      - name: Setup Node.js
+      - name: Setup Node.js 18
         uses: actions/setup-node@v4
         with:
           node-version: '18'
+          cache: 'npm'
 
-      - name: Install FFmpeg (The Engine)
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
-
-      - name: Force NPM to STOP Being a Bitch
+      - name: Install FFmpeg
         run: |
-          npm init -y
-          npm pkg set overrides.libsodium-wrappers="0.7.10"
-          npm install discord.js-selfbot-v13 @dank074/discord-video-stream sqlite3 tweetnacl
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
 
-      - name: Run The Encrypted Ghost Bot
+      - name: Install dependencies
+        run: |
+          npm install
+          # Ensure libsodium is present (fixes ERR_MODULE_NOT_FOUND)
+          npm install libsodium-wrappers libsodium-wrappers-sumo --save
+
+      - name: Run the bot
         env:
           TOKEN: ${{ secrets.TOKEN }}
           KAMBIZ_ID: ${{ secrets.KAMBIZ_ID }}
         run: node index.js
+        timeout-minutes: 350   # تقریباً نزدیک به ۴ ساعت
