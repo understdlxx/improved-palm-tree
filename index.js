@@ -1,5 +1,4 @@
 const { Client: DiscordClient } = require('discord.js-selfbot-v13');
-const { Streamer, streamVideo } = require('@dank074/discord-video-stream');
 const sqlite3 = require('sqlite3').verbose();
 const { execSync } = require('child_process');
 const crypto = require('crypto');
@@ -13,7 +12,6 @@ if (!TOKEN || !KAMBIZ_ID) {
 }
 
 // 🛡️ سیستم رمزنگاری نظامی AES-256-CBC 
-// کلید رمزنگاری رو از خود توکن دیسکوردت می‌سازیم که هیچ جا ذخیره نشه
 const ENCRYPTION_KEY = crypto.createHash('sha256').update(TOKEN).digest();
 const IV_LENGTH = 16;
 
@@ -35,13 +33,15 @@ function decryptData(text) {
         decrypted = Buffer.concat([decrypted, decipher.final()]);
         return decrypted.toString();
     } catch (err) {
-        console.error('[-] Khata to baz kardane ramz (Ehtemalan taze sakhti):', err.message);
-        return null;
+        return null; // اگه دفعه اول باشه و فایلی نباشه ارور نمیده
     }
 }
 
 const client = new DiscordClient({ checkUpdate: false });
-const streamer = new Streamer(client);
+
+// متغیرهای استریم رو اینجا خالی می‌ذاریم که بعداً با ترفندمون پر بشن
+let streamer;
+let streamVideo;
 
 let localState = {
     url: null, currentTime: 0, bookmarks: [],
@@ -52,7 +52,6 @@ let localState = {
 const db = new sqlite3.Database('./kambiz_memory.sqlite');
 
 db.serialize(() => {
-    // فقط یه آیدی و یه فیلد رمزنگاری شده ذخیره میکنیم. هیچ دیتای خامی نیست!
     db.run(`CREATE TABLE IF NOT EXISTS encrypted_state (
         id TEXT PRIMARY KEY,
         secure_payload TEXT
@@ -86,7 +85,7 @@ function saveDB() {
             current_time: localState.currentTime,
             bookmarks: localState.bookmarks
         });
-        const encryptedPayload = encryptData(rawData); // قفلش میکنیم
+        const encryptedPayload = encryptData(rawData); 
         
         const stmt = db.prepare(`INSERT OR REPLACE INTO encrypted_state (id, secure_payload) VALUES (?, ?)`);
         stmt.run('main', encryptedPayload, () => {
@@ -96,11 +95,10 @@ function saveDB() {
     });
 }
 
-// 🚀 ارسال فایلِ رمزنگاری شده به گیت‌هاب (کاملاً سایلنت که لاگ نیفته)
+// 🚀 ارسال فایلِ رمزنگاری شده به گیت‌هاب سایلنت
 function pushDBtoGitHub() {
     try {
         console.log('[+] Dar hale Push kardane DB be sorate makhfiyane...');
-        // اضافه کردن stdio: 'ignore' باعث میشه ترمینال گیت‌هاب هیچ لاگی نندازه که هکر بخونه
         execSync('git config --global user.name "Ghost Bot"', { stdio: 'ignore' });
         execSync('git config --global user.email "ghost@kambiz.local"', { stdio: 'ignore' });
         execSync('git add kambiz_memory.sqlite', { stdio: 'ignore' });
@@ -164,7 +162,7 @@ async function stopStreaming() {
     await saveDB(); 
     pushDBtoGitHub(); 
     
-    console.log(`[||] Stream stop shod. Database Ramznegarishode push shod. Time: ${formatTime(localState.currentTime)}`);
+    console.log(`[||] Stream stop shod. DB Ramznegarishode push shod. Time: ${formatTime(localState.currentTime)}`);
 }
 
 client.on('voiceStateUpdate', async (oldState, newState) => {
@@ -223,4 +221,22 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-client.login(TOKEN);
+// ⚡ هسته‌ی اصلی ربات: دور زدن ارور ESM با داینامیک ایمپورت
+async function startBot() {
+    try {
+        console.log('[+] Dar hale load kardane engine stream...');
+        const videoStream = await import('@dank074/discord-video-stream');
+        const Streamer = videoStream.Streamer;
+        streamVideo = videoStream.streamVideo;
+        
+        streamer = new Streamer(client);
+        
+        console.log('[+] Engine load shod. Dar hale vasl shodan be Discord...');
+        client.login(TOKEN);
+    } catch (err) {
+        console.error('[-] Ride shod to load kardane engine:', err);
+    }
+}
+
+// استارت موتور!
+startBot();
