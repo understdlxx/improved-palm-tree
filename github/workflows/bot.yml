@@ -1,0 +1,32 @@
+name: Kambiz Smart Streamer Bot
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */5 * * *"
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js (V18 for Native Fetch)
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install FFmpeg (The Beast Engine)
+        run: sudo apt update && sudo apt install -y ffmpeg
+
+      - name: Install Dependencies (No Database Needed!)
+        run: npm install discord.js-selfbot-v13 @dank074/discord-video-stream
+
+      - name: Run The Hacker-Proof Bot
+        env:
+          TOKEN: ${{ secrets.TOKEN }}
+          KAMBIZ_ID: ${{ secrets.KAMBIZ_ID }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GIST_ID: ${{ secrets.GIST_ID }}
+        run: node index.js
