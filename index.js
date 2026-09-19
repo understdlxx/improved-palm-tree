@@ -33,13 +33,12 @@ function decryptData(text) {
         decrypted = Buffer.concat([decrypted, decipher.final()]);
         return decrypted.toString();
     } catch (err) {
-        return null; // اگه دفعه اول باشه و فایلی نباشه ارور نمیده
+        return null;
     }
 }
 
 const client = new DiscordClient({ checkUpdate: false });
 
-// متغیرهای استریم رو اینجا خالی می‌ذاریم که بعداً با ترفندمون پر بشن
 let streamer;
 let streamVideo;
 
@@ -48,7 +47,7 @@ let localState = {
     isPlaying: false, streamConnection: null
 };
 
-// 🧠 اتصال به دیتابیس لوکال
+// 🧠 اتصال به دیتابیس لوکال مخفی
 const db = new sqlite3.Database('./kambiz_memory.sqlite');
 
 db.serialize(() => {
@@ -58,7 +57,6 @@ db.serialize(() => {
     )`);
 });
 
-// 🧠 خوندن و باز کردن رمز اطلاعات
 function loadDB() {
     return new Promise((resolve) => {
         db.get("SELECT secure_payload FROM encrypted_state WHERE id = 'main'", (err, row) => {
@@ -77,7 +75,6 @@ function loadDB() {
     });
 }
 
-// 🧠 رمزنگاری و ذخیره تو دیتابیس محلی
 function saveDB() {
     return new Promise((resolve) => {
         const rawData = JSON.stringify({
@@ -95,7 +92,6 @@ function saveDB() {
     });
 }
 
-// 🚀 ارسال فایلِ رمزنگاری شده به گیت‌هاب سایلنت
 function pushDBtoGitHub() {
     try {
         console.log('[+] Dar hale Push kardane DB be sorate makhfiyane...');
@@ -221,7 +217,7 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// ⚡ هسته‌ی اصلی ربات: دور زدن ارور ESM با داینامیک ایمپورت
+// ⚡ هسته‌ی اصلی ربات: اجرای داینامیک و امن
 async function startBot() {
     try {
         console.log('[+] Dar hale load kardane engine stream...');
@@ -232,7 +228,7 @@ async function startBot() {
         streamer = new Streamer(client);
         
         console.log('[+] Engine load shod. Dar hale vasl shodan be Discord...');
-        client.login(TOKEN);
+        await client.login(TOKEN);
     } catch (err) {
         console.error('[-] Ride shod to load kardane engine:', err);
     }
